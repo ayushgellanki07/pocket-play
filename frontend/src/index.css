@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* ---------- Numerals ----------
+   Root cause of the "5 looks like 8/S" bug: Pixelify Sans (our pixel display face) draws a bold
+   "5" that is nearly identical to "8" and "S", and it has no ₹ glyph at all, so the browser mixed
+   in a fallback font for the rupee sign. "PP Digits" is Noto Sans limited (via unicode-range) to
+   digits, ₹ and number punctuation, and it sits FIRST in the pixel font stack: letters stay
+   pixel-art, every number renders in one clear, consistent face.
+   Numeral policy: Western digits (0–9) in every language, Indian grouping (₹1,50,000) via
+   Intl.NumberFormat('en-IN') in src/lib/finance.ts. */
+@font-face {
+  font-family: "PP Digits";
+  src: url("../node_modules/@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2") format("woff2");
+  font-weight: 100 599; font-display: swap;
+  unicode-range: U+0030-0039, U+002B-002F, U+0025, U+2212, U+00D7, U+00F7;
+}
+@font-face {
+  font-family: "PP Digits";
+  src: url("../node_modules/@fontsource/noto-sans/files/noto-sans-latin-700-normal.woff2") format("woff2");
+  font-weight: 600 900; font-display: swap;
+  unicode-range: U+0030-0039, U+002B-002F, U+0025, U+2212, U+00D7, U+00F7;
+}
+@font-face {
+  font-family: "PP Digits";
+  src: url("../node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff2") format("woff2");
+  font-weight: 100 599; font-display: swap; unicode-range: U+20B9;
+}
+@font-face {
+  font-family: "PP Digits";
+  src: url("../node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff2") format("woff2");
+  font-weight: 600 900; font-display: swap; unicode-range: U+20B9;
+}
+
+/* Design tokens. Each world overrides --accent / --accent-2 / --tint on its scene root,
+   so every panel, button and highlight re-themes itself automatically. */
+@theme {
+  --font-pixel: "PP Digits", "Pixelify Sans", "Noto Sans Telugu", "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif;
+  --font-body: "PP Digits", "Noto Sans", "Noto Sans Telugu", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-mono: "PP Digits", ui-monospace, "Noto Sans Mono", Menlo, Consolas, monospace;
+  --color-ink: #140f2b;
+  --color-ink-2: #1c163a;
+  --color-ink-3: #2a2152;
+  --color-parchment: #f3ead7;
+  --color-gold: #f5c542;
+  --color-cyan: #3ee6f0;
+  --color-good: #52e08a;
+  --color-bad: #ff5d6c;
+  --color-warn: #ffb547;
+}
+
+:root {
+  --accent: #3ee6f0;
+  --accent-2: #f5c542;
+  --tint: rgba(20, 15, 43, 0.55);
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: #140f2b;
+  color: #f3ead7;
+  font-family: var(--font-body);
+  font-variant-numeric: lining-nums;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+/* Telugu / Hindi: Pixelify has no Indic glyphs, so headings switch wholesale to the matching Noto face
+   (no half-pixel, half-Noto words). Digits still come from "PP Digits" so numbers look identical in
+   every language. Slightly taller line-height leaves room for Indic vowel signs above and below. */
+html[lang="te"] { --font-pixel: "PP Digits", "Noto Sans Telugu", "Noto Sans", system-ui, sans-serif; --font-body: "PP Digits", "Noto Sans Telugu", "Noto Sans", system-ui, sans-serif; }
+html[lang="hi"] { --font-pixel: "PP Digits", "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif; --font-body: "PP Digits", "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif; }
+html[lang="te"] body, html[lang="hi"] body { line-height: 1.6; }
+html[lang="te"] .font-pixel, html[lang="hi"] .font-pixel { font-weight: 700; letter-spacing: 0; line-height: 1.35; }
+.font-pixel, .font-mono, .tabular-nums { font-variant-numeric: tabular-nums lining-nums; }
+
+img.pixel, .pixel { image-rendering: pixelated; }
+
+/* Chunky RPG panel: a double border made of two box-shadows instead of rounded cards. */
+.panel {
+  background: linear-gradient(180deg, rgba(34, 27, 70, 0.94), rgba(20, 15, 43, 0.96));
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, #000);
+  box-shadow: 0 0 0 2px #0b0818, 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent), 0 18px 40px rgba(0,0,0,.55);
+  border-radius: 4px;
+}
+.panel-soft {
+  background: rgba(20, 15, 43, 0.72);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 4px;
+  backdrop-filter: blur(6px);
+}
+
+.btn {
+  font-family: var(--font-pixel);
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .6rem 1.1rem;
+  border-radius: 3px;
+  border: 2px solid #0b0818;
+  background: var(--accent);
+  color: #0b0818;
+  font-weight: 700;
+  letter-spacing: .02em;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.25), 0 3px 0 #0b0818;
+  transition: transform .08s ease, filter .15s ease;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.12); }
+.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0,0,0,.25), 0 1px 0 #0b0818; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-ghost { background: rgba(255,255,255,.06); color: #f3ead7; border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow: none; }
+.btn-gold { background: var(--color-gold); }
+.btn-bad { background: var(--color-bad); }
+.btn-good { background: var(--color-good); }
+.btn-sm { padding: .35rem .7rem; font-size: .85rem; }
+
+:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 2px; }
+
+.term { color: var(--accent-2); font-weight: 700; text-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.glow-text { text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent), 0 2px 0 #0b0818; }
+
+.scanlines::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.08) 0 1px, transparent 1px 3px);
+}
+
+input[type="range"] { accent-color: var(--accent); width: 100%; }
+
+.scroll-thin { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 50%, transparent) transparent; }
+
+@keyframes portal-spin { to { transform: rotate(360deg); } }
+@keyframes float-y { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes glitch {
+  0%, 92%, 100% { clip-path: none; transform: none; }
+  93% { clip-path: inset(20% 0 60% 0); transform: translateX(-6px); }
+  95% { clip-path: inset(60% 0 10% 0); transform: translateX(6px); }
+  97% { clip-path: inset(40% 0 40% 0); transform: translateX(-3px); }
+}
+.float { animation: float-y 4s ease-in-out infinite; }
+.glitch { animation: glitch 6s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#140f2b" />
+    <title>PocketPlay</title>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Loading screen: shown until the game's JavaScript takes over #root. -->
+      <div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#140f2b;color:#f3ead7;font-family:'Pixelify Sans',system-ui,sans-serif">
+        <svg width="84" height="84" viewBox="0 0 32 32" shape-rendering="crispEdges" style="animation:pp-spin 2.4s linear infinite"><circle cx="16" cy="16" r="15" fill="#f5c542" stroke="#5a3a00" stroke-width="2"/><circle cx="16" cy="16" r="11" fill="#3a2d8a" stroke="#5a3a00"/><polygon points="16,5 18,14 16,16 14,14" fill="#f3ead7"/><polygon points="16,27 18,18 16,16 14,18" fill="#7a5cff"/><polygon points="5,16 14,14 16,16 14,18" fill="#3ee6f0"/><polygon points="27,16 18,14 16,16 18,18" fill="#3ee6f0"/><circle cx="16" cy="16" r="3" fill="#f5c542"/></svg>
+        <div style="font-size:40px;font-weight:700"><span>Pocket</span><span style="color:#f5c542">Play</span></div>
+        <div style="color:#3ee6f0;font-size:15px">Your Adventure. Your Money. Your Future.</div>
+        <div style="opacity:.6;font-size:13px">Loading the islands…</div>
+        <style>@keyframes pp-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){svg{animation:none!important}}</style>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
