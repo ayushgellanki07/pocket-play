@@ -60,9 +60,22 @@ export function FinancialHUD({ objective, next }: { objective: string; next: str
           <Stat icon={<Star size={20} />} label={t('hud.mastery')} tone="#7ef0ff"><AnimatedNumber value={g.masteryPoints} format={n => String(Math.round(n))} /></Stat>
         </div>
         <nav className="order-2 ml-auto flex items-center gap-1 sm:order-none" aria-label={t('aria.gameMenu')}>
+          {/* Join Code Badge */}
+          {g.joinCode && (
+            <div
+              className="flex items-center gap-1 rounded-sm border border-teal-400/40 bg-teal-950/80 px-2 py-1 font-mono text-xs font-bold tracking-wider text-teal-300 shadow-sm"
+              title="Session Resume Code"
+            >
+              <span aria-hidden>🔑</span>
+              <span>{g.joinCode}</span>
+            </div>
+          )}
+
           <div className="hidden md:block"><LanguageSelector compact /></div>
           <button className="btn btn-ghost btn-sm" onClick={() => setOverlay('ledger')} aria-label={t('hud.ledger')}><ScrollText size={16} /></button>
-          <button className="btn btn-ghost btn-sm" onClick={() => g.setPhase('map')} aria-label={t('hud.mapHub')}><Map size={16} /></button>
+
+<Map size={16} />
+<button className="btn btn-ghost btn-sm" onClick={() => g.setPhase('map')} aria-label={t('hud.mapHub')}></button>
           <button className="btn btn-ghost btn-sm" onClick={toggleSound} aria-label={soundOn ? t('hud.soundOn') : t('hud.soundOff')}>{soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
           <button className="btn btn-sm" onClick={() => setOverlay('pause')} aria-label={t('hud.pause')}><Pause size={16} /></button>
         </nav>

@@ -48,6 +48,7 @@ export interface ScoreCard {
 }
 
 export interface GameState {
+  joinCode?: string;
   saveVersion: number
   playerName: string
   wallet: number

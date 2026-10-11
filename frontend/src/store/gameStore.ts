@@ -11,19 +11,21 @@
 // `wallet`, `activeWorld`… directly); they are written to disk under `storyProgress`.
 import { create } from 'zustand'
 import type { DirectProgress, DirectTopicRecord, Profile, GameState, Lang, Loan, Phase, Portfolio, ScoreCard, TxInput, WorldId } from '../types.ts'
+import { api } from '../lib/api.ts'
 
 export const SAVE_KEY = 'pocketplay.save'
 export const BACKUP_KEY = 'pocketplay.save.v1-backup'
 export const SAVE_VERSION = 3 // v3 adds `profile` (playthroughs + seen dialogue) and `runCounted`
 
 export const initialState = (): GameState => ({
+  joinCode: '',
   saveVersion: SAVE_VERSION,
   playerName: '',
   wallet: 0,
   reserve: 0,
   cibilScore: 650,
   activeWorld: 1,
-  unlockedNodes: [],
+  unlockedNodes: [1],
   language: 'en',
   sceneIndex: 0,
   completedChallenges: [],
@@ -47,10 +49,32 @@ export const initialDirect = (): DirectProgress => ({ topics: {}, recent: [], hi
 export const initialProfile = (): Profile => ({ storyPlaythroughsCompleted: 0, seenDialogue: [] })
 
 /** Story fields — exactly what goes into `storyProgress` on disk. */
-const STORY_KEYS = ['playerName', 'wallet', 'reserve', 'cibilScore', 'activeWorld', 'unlockedNodes', 'sceneIndex', 'completedChallenges',
-  'completedLearning', 'masteryPoints', 'mastery', 'transactions', 'portfolio', 'loans', 'monthlyIncome', 'monthlyExpenses', 'scorecard', 'storyChoices', 'runCounted'] as const
+const STORY_KEYS = [
+  'joinCode',
+  'playerName',
+  'wallet',
+  'reserve',
+  'cibilScore',
+  'activeWorld',
+  'unlockedNodes',
+  'sceneIndex',
+  'completedChallenges',
+  'completedLearning',
+  'masteryPoints',
+  'mastery',
+  'transactions',
+  'portfolio',
+  'loans',
+  'monthlyIncome',
+  'monthlyExpenses',
+  'scorecard',
+  'storyChoices',
+  'runCounted'
+] as const
 
-interface Actions {
+export interface Actions {
+  setJoinCode: (code: string) => void
+  hydrateFromServer: (sessionData: any) => void
   newGame: (name: string) => void
   continueGame: () => void
   setPhase: (p: Phase) => void
@@ -76,7 +100,7 @@ interface Actions {
   resetDirect: () => void
 }
 
-type Store = GameState & Actions & { hasSave: boolean; direct: DirectProgress; profile: Profile }
+export type Store = GameState & Actions & { hasSave: boolean; direct: DirectProgress; profile: Profile }
 
 /* ---------- validation helpers ---------- */
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
@@ -89,6 +113,7 @@ function readStory(d: Record<string, unknown>): Partial<GameState> | null {
   const base = initialState()
   const portfolio = d.portfolio as Portfolio | undefined
   return {
+    joinCode: typeof d.joinCode === 'string' ? d.joinCode : '',
     playerName: d.playerName.slice(0, 24),
     wallet: isNum(d.wallet) ? d.wallet : base.wallet,
     reserve: isNum(d.reserve) ? d.reserve : base.reserve,
@@ -189,6 +214,28 @@ export const useGame = create<Store>((set, get) => ({
   direct: saved.direct,
   profile: saved.profile,
 
+  setJoinCode: (joinCode: string) => set({ joinCode }),
+
+  hydrateFromServer: (data: any) => {
+    if (!data) return
+    const s = data.session || data
+    if (!s || !s.joinCode) return
+
+    set({
+      joinCode: s.joinCode,
+      playerName: s.playerName || get().playerName || 'Pappu',
+      wallet: Number(s.wallet ?? get().wallet),
+      reserve: Number(s.reserve ?? get().reserve),
+      cibilScore: Number(s.cibilScore ?? get().cibilScore),
+      language: (s.language as Lang) || get().language,
+      activeWorld: (Number(s.activeWorld) || get().activeWorld || 1) as WorldId,
+      unlockedNodes: Array.isArray(s.unlockedNodes) && s.unlockedNodes.length > 0 ? s.unlockedNodes : (get().unlockedNodes.length ? get().unlockedNodes : [1]),
+      completedChallenges: Array.isArray(s.completedChallenges) ? s.completedChallenges : get().completedChallenges,
+      hasSave: true,
+      phase: 'map',
+    })
+  },
+
   newGame: (name) => {
     const s = get()
     // A new story run never touches Direct Mode progress or the player profile (playthrough count).
@@ -280,5 +327,23 @@ export const useGame = create<Store>((set, get) => ({
   markDialogueSeen: (id) => { const p = get().profile; if (!p.seenDialogue.includes(id)) set({ profile: { ...p, seenDialogue: [...p.seenDialogue, id] } }) },
 }))
 
-// Auto-save on every change (the save is a few KB).
-useGame.subscribe(s => persist(s))
+// Auto-save locally and debounced sync to SQLite backend
+let syncTimeout: any = null
+useGame.subscribe(s => {
+  persist(s)
+
+  if (s.joinCode && !s.joinCode.startsWith('OFF-')) {
+    clearTimeout(syncTimeout)
+    syncTimeout = setTimeout(() => {
+      api.syncProgress(s.joinCode!, {
+        wallet: s.wallet,
+        reserve: s.reserve,
+        cibilScore: s.cibilScore,
+        activeWorld: s.activeWorld,
+        unlockedNodes: s.unlockedNodes,
+        completedChallenges: s.completedChallenges,
+        language: s.language,
+      })
+    }, 500)
+  }
+})

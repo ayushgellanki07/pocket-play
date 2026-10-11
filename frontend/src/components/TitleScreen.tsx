@@ -10,14 +10,16 @@ import { Particles } from './ui/Particles.tsx'
 import { audio } from '../lib/audio.ts'
 import { pappuImg } from '../data/worlds.ts'
 import { Logo } from './Logo.tsx'
+import { api } from '../lib/api.ts'
 
 /** Cinematic title: the real-world classroom and the frontier, split by a dimensional portal. */
 export function TitleScreen() {
   const t = useT()
   const g = useGame()
-  const [modal, setModal] = useState<null | 'help' | 'settings'>(null)
+  const [modal, setModal] = useState<null | 'help' | 'settings' | 'resume'>(null)
   const soundOn = g.audio.music || g.audio.sfx
   const start = (fn: () => void) => { audio.unlock(); audio.sfx('portal'); fn() }
+
   return (
     <main className="relative h-full w-full overflow-hidden bg-ink">
       {/* two worlds */}
@@ -57,6 +59,19 @@ export function TitleScreen() {
 
         <motion.nav className="flex w-full max-w-sm flex-col gap-3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} aria-label={t('aria.mainMenu')}>
           <button className="btn btn-gold py-3 text-lg" onClick={() => start(() => g.setPhase('modes'))} autoFocus><Play size={18} aria-hidden />{t('title.play')}</button>
+          
+          {/* Resume Session Button */}
+          <button
+            type="button"
+            className="btn btn-ghost border border-parchment/20 py-2.5 text-sm font-semibold tracking-wide text-teal-300 hover:border-teal-400"
+            onClick={() => {
+              audio.unlock()
+              setModal('resume')
+            }}
+          >
+            🔑 Resume with Code
+          </button>
+
           {g.hasSave && (
             <>
               <button className="btn btn-ghost py-2" onClick={() => start(g.continueGame)}><RotateCw size={16} aria-hidden />{t('title.continueStory')}</button>
@@ -78,7 +93,74 @@ export function TitleScreen() {
           </ol>
         </Modal>
       )}
+
+      {/* Resume Session Modal */}
+      {modal === 'resume' && (
+        <Modal title="Resume Existing Session" onClose={() => setModal(null)} labelClose={t('common.close')}>
+          <ResumeSessionForm
+            onSuccess={(sessionData) => {
+              g.hydrateFromServer(sessionData)
+              setModal(null)
+            }}
+          />
+        </Modal>
+      )}
+
       {modal === 'settings' && <Modal title={t('title.sound')} onClose={() => setModal(null)} labelClose={t('common.close')}><SettingsPanel /></Modal>}
     </main>
+  )
+}
+
+function ResumeSessionForm({ onSuccess }: { onSuccess: (data: any) => void }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const cleanCode = code.trim().toUpperCase()
+    if (!cleanCode || loading) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.resumeSession(cleanCode)
+      const sessionData = res?.session || res
+      if (!sessionData || !sessionData.joinCode) {
+        throw new Error('Session not found. Please check your code.')
+      }
+      onSuccess(sessionData)
+    } catch (err: any) {
+      setError(err.message || 'Session not found. Please check your code.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3 py-1 text-left">
+      <p className="text-xs text-parchment/80">
+        Enter your session join code (e.g.{' '}
+        <span className="font-mono font-bold text-teal-300">HYD-743</span>) to restore your wallet,
+        score, and unlocked portals.
+      </p>
+      <input
+        type="text"
+        autoFocus
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        placeholder="HYD-743"
+        maxLength={8}
+        className="w-full rounded border border-parchment/30 bg-black/40 px-3 py-2 text-center font-mono text-lg font-bold tracking-widest text-parchment focus:border-teal-400 focus:outline-none"
+      />
+      {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
+      <button
+        type="submit"
+        disabled={loading || !code.trim()}
+        className="btn btn-gold mt-2 py-2"
+      >
+        {loading ? 'Resuming...' : 'Load Session'}
+      </button>
+    </form>
   )
 }

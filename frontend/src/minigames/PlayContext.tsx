@@ -12,6 +12,7 @@ import { audio } from '../lib/audio.ts'
 import { inr } from '../lib/finance.ts'
 import { tNow } from '../i18n/useT.ts'
 import type { Loan, Portfolio, ScoreCard, TxInput } from '../types.ts'
+import { api } from '../lib/api.ts'
 
 export interface Finances { wallet: number; reserve: number; cibil: number; portfolio: Portfolio; loans: Loan[] }
 export interface Report { win: boolean; score?: number; mistakes?: string[] }
@@ -48,23 +49,73 @@ function showFx(txs: TxInput[], fx?: FxOpts, tag = '') {
   if (fx?.coins) { useFx.getState().burst(); audio.sfx('coin') }
 }
 
+/** Map minigame ID or topic area to Vanguard's Four Learning Pillars */
+function resolvePillar(areaOrId: string = ''): 'plan_budget' | 'save_manage' | 'understand_investing' | 'stay_safe' {
+  const k = areaOrId.toLowerCase()
+  if (k.includes('budget') || k.includes('sorter') || k.includes('ledger') || k.includes('bargain') || k.includes('value')) {
+    return 'plan_budget'
+  }
+  if (k.includes('emergency') || k.includes('emi') || k.includes('deposit') || k.includes('save') || k.includes('loan')) {
+    return 'save_manage'
+  }
+  if (k.includes('compound') || k.includes('snowball') || k.includes('market') || k.includes('invest') || k.includes('72') || k.includes('pe')) {
+    return 'understand_investing'
+  }
+  return 'stay_safe'
+}
+
 /** Story Mode: everything goes to the saved story record. */
 export function StoryPlayProvider({ children }: { children: ReactNode }) {
   const g = useGame()
-  const api = useMemo<PlayApi>(() => ({
+  const apiInstance = useMemo<PlayApi>(() => ({
     mode: 'story',
     wallet: g.wallet, reserve: g.reserve, cibil: g.cibilScore, portfolio: g.portfolio, loans: g.loans,
     commit: (txs, fx) => { useGame.getState().applyTx(txs); showFx(txs, fx) },
-    award: (id, area, pts) => useGame.getState().completeChallenge(id, area, pts),
+    award: (id, area, pts) => {
+      useGame.getState().completeChallenge(id, area, pts)
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: resolvePillar(area || id),
+          eventType: 'challenge_complete',
+          score: pts,
+          metadata: { challengeId: id, area, mode: 'story' }
+        })
+      }
+    },
     setCibil: n => useGame.getState().setCibil(n),
     setPortfolio: p => useGame.getState().setPortfolio(p),
     addLoan: l => useGame.getState().addLoan(l),
     updateLoans: l => useGame.getState().updateLoans(l),
     setCashflow: (i, e) => useGame.getState().setCashflow(i, e),
-    report: () => {},
-    finishStory: card => useGame.getState().finishGame(card),
+    report: r => {
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: 'plan_budget',
+          eventType: 'story_attempt',
+          score: r.score ?? (r.win ? 100 : 0),
+          metadata: { win: r.win, mistakes: r.mistakes, mode: 'story' }
+        })
+      }
+    },
+    finishStory: card => {
+      useGame.getState().finishGame(card)
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: 'understand_investing',
+          eventType: 'story_finished',
+          score: card.overall,
+          metadata: { passed: card.passed }
+        })
+      }
+    },
   }), [g.wallet, g.reserve, g.cibilScore, g.portfolio, g.loans])
-  return <Ctx.Provider value={api}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={apiInstance}>{children}</Ctx.Provider>
 }
 
 /** Direct Mode: a sandbox that starts from `start` and is thrown away afterwards. */
@@ -72,7 +123,7 @@ export function DirectPlayProvider({ start, onReport, children }: { start: Finan
   const [f, setF] = useState<Finances>(start)
   const reportRef = useRef(onReport)
   reportRef.current = onReport
-  const api = useMemo<PlayApi>(() => ({
+  const apiInstance = useMemo<PlayApi>(() => ({
     mode: 'direct',
     ...f,
     commit: (txs, fx) => {
@@ -88,14 +139,49 @@ export function DirectPlayProvider({ start, onReport, children }: { start: Finan
       })
       showFx(txs, fx, `${tNow('fx.practice')}: `)
     },
-    award: () => {}, // Direct Mode never grants story mastery
+    award: (id, area, pts) => {
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: resolvePillar(area || id),
+          eventType: 'practice_award',
+          score: pts,
+          metadata: { challengeId: id, area, mode: 'direct' }
+        })
+      }
+    },
     setCibil: cibil => setF(p => ({ ...p, cibil })),
     setPortfolio: portfolio => setF(p => ({ ...p, portfolio })),
     addLoan: l => setF(p => ({ ...p, loans: [...p.loans.filter(x => x.id !== l.id), l] })),
     updateLoans: loans => setF(p => ({ ...p, loans })),
     setCashflow: () => {},
-    report: r => reportRef.current(r),
-    finishStory: card => reportRef.current({ win: card.passed, score: card.overall }),
+    report: r => {
+      reportRef.current(r)
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: 'plan_budget',
+          eventType: 'practice_attempt',
+          score: r.score ?? (r.win ? 100 : 0),
+          metadata: { win: r.win, mistakes: r.mistakes, mode: 'direct' }
+        })
+      }
+    },
+    finishStory: card => {
+      reportRef.current({ win: card.passed, score: card.overall })
+      const code = useGame.getState().joinCode
+      if (code) {
+        api.logTelemetry({
+          joinCode: code,
+          pillarId: 'understand_investing',
+          eventType: 'practice_finished',
+          score: card.overall,
+          metadata: { passed: card.passed, mode: 'direct' }
+        })
+      }
+    },
   }), [f])
-  return <Ctx.Provider value={api}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={apiInstance}>{children}</Ctx.Provider>
 }
