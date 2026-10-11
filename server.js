@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { db, initDatabase } = require('./database');
 
 const app = express();
@@ -214,6 +215,27 @@ app.get('/api/facilitator/cohort-summary', (req, res) => {
       });
     });
   });
+});
+
+// ----------------------------------------------------
+// 7. Serve Static Frontend Bundle in Production
+// ----------------------------------------------------
+const frontendDist = path.resolve(__dirname, 'frontend', 'dist');
+
+// Serve static assets (JS, CSS, images, etc.)
+app.use(express.static(frontendDist));
+
+// Root path handler
+app.get('/', (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
+
+// SPA fallback for client-side routing
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    return res.sendFile(path.join(frontendDist, 'index.html'));
+  }
+  next();
 });
 
 // Start listening
