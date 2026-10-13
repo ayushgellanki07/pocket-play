@@ -1,48 +1,57 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-// 1. Connect to SQLite file (game.db)
-const db = new sqlite3.Database(path.join(__dirname, 'game.db'), (err) => {
-  if (err) {
-    console.error('Database connection failed:', err.message);
-  } else {
-    console.log('Connected to SQLite database: game.db');
-  }
+// Create Postgres connection pool using the cloud URL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-// 2. Initialize schema tables
-function initDatabase() {
-  db.serialize(() => {
-    // Session & progress state (No PII: tracks via anonymous join_code)
-    db.run(`
-      CREATE TABLE IF NOT EXISTS student_sessions (
-        join_code TEXT PRIMARY KEY,
-        custom_player_name TEXT NOT NULL,
-        cohort_id TEXT DEFAULT 'HYDERABAD-G11-G12',
-        active_world INTEGER DEFAULT 1,
-        wallet INTEGER DEFAULT 0,
-        reserve INTEGER DEFAULT 0,
-        cibil_score INTEGER DEFAULT 650,
-        unlocked_portals TEXT DEFAULT '["prologue"]',
-        completed_minigames TEXT DEFAULT '[]',
-        language TEXT DEFAULT 'en',
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+pool.on('connect', () => {
+  console.log('Connected to Supabase PostgreSQL database.');
+});
 
-    // NGO telemetry event stream (tracks aggregate learning without PII)
-    db.run(`
-      CREATE TABLE IF NOT EXISTS game_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        join_code TEXT NOT NULL,
-        cohort_id TEXT NOT NULL,
-        pillar_id TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        score INTEGER DEFAULT 0,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-  });
+pool.on('error', (err) => {
+  console.error('Database connection error:', err.message);
+});
+
+// Converts SQLite '?' placeholders to Postgres '$1, $2, ...'
+function toPgSql(sql) {
+  let index = 1;
+  let pgSql = sql.replace(/\?/g, () => `$${index++}`);
+
+  // Auto-append RETURNING id for INSERT queries if not already present
+  // so this.lastID continues to work in server.js
+  if (/^\s*insert\s+into\s+/i.test(pgSql) && !/returning/i.test(pgSql)) {
+    pgSql += ' RETURNING id';
+  }
+  return pgSql;
+}
+
+// Drop-in wrapper keeping all existing server.js endpoints intact
+const db = {
+  run(sql, params = [], cb = () => {}) {
+    pool.query(toPgSql(sql), params, (err, res) => {
+      if (err) return cb(err);
+      const lastID = res.rows?.[0]?.id || null;
+      cb.call({ lastID, changes: res.rowCount }, null);
+    });
+  },
+  get(sql, params = [], cb = () => {}) {
+    pool.query(toPgSql(sql), params, (err, res) => {
+      if (err) return cb(err, null);
+      cb(null, res.rows[0]);
+    });
+  },
+  all(sql, params = [], cb = () => {}) {
+    pool.query(toPgSql(sql), params, (err, res) => {
+      if (err) return cb(err, null);
+      cb(null, res.rows);
+    });
+  }
+};
+
+function initDatabase() {
+  // Schema is already provisioned directly in Supabase SQL editor
 }
 
 module.exports = { db, initDatabase };
