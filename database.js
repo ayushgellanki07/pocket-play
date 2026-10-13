@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 
-// Create Postgres connection pool using the cloud URL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
@@ -19,39 +18,36 @@ function toPgSql(sql) {
   let index = 1;
   let pgSql = sql.replace(/\?/g, () => `$${index++}`);
 
-  // Auto-append RETURNING id for INSERT queries if not already present
-  // so this.lastID continues to work in server.js
-  if (/^\s*insert\s+into\s+/i.test(pgSql) && !/returning/i.test(pgSql)) {
+  // Only append RETURNING id for game_events (which contains a serial id primary key)
+  if (/insert\s+into\s+game_events/i.test(pgSql) && !/returning/i.test(pgSql)) {
     pgSql += ' RETURNING id';
   }
+
   return pgSql;
 }
 
-// Drop-in wrapper keeping all existing server.js endpoints intact
 const db = {
   run(sql, params = [], cb = () => {}) {
     pool.query(toPgSql(sql), params, (err, res) => {
       if (err) return cb(err);
-      const lastID = res.rows?.[0]?.id || null;
-      cb.call({ lastID, changes: res.rowCount }, null);
+      const lastID = res?.rows?.[0]?.id || null;
+      cb.call({ lastID, changes: res?.rowCount || 0 }, null);
     });
   },
   get(sql, params = [], cb = () => {}) {
     pool.query(toPgSql(sql), params, (err, res) => {
       if (err) return cb(err, null);
-      cb(null, res.rows[0]);
+      cb(null, res?.rows?.[0] || null);
     });
   },
   all(sql, params = [], cb = () => {}) {
     pool.query(toPgSql(sql), params, (err, res) => {
       if (err) return cb(err, null);
-      cb(null, res.rows);
+      cb(null, res?.rows || []);
     });
   }
 };
 
-function initDatabase() {
-  // Schema is already provisioned directly in Supabase SQL editor
-}
+function initDatabase() {}
 
 module.exports = { db, initDatabase };
