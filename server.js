@@ -181,37 +181,45 @@ app.post('/api/telemetry/event', (req, res) => {
 app.get('/api/facilitator/cohort-summary', (req, res) => {
   const summarySql = `
     SELECT
-      COUNT(DISTINCT join_code) AS totalStudents,
-      AVG(wallet) AS avgWallet,
-      AVG(reserve) AS avgReserve,
-      AVG(cibil_score) AS avgCibilScore
+      COUNT(DISTINCT join_code) AS "totalStudents",
+      COALESCE(AVG(wallet), 0) AS "avgWallet",
+      COALESCE(AVG(reserve), 0) AS "avgReserve",
+      COALESCE(AVG(cibil_score), 650) AS "avgCibilScore"
     FROM student_sessions
   `;
 
   db.get(summarySql, [], (err, summary) => {
     if (err) {
+      console.error('Error aggregating cohort data:', err.message);
       return res.status(500).json({ error: 'Failed to aggregate cohort data' });
     }
 
     const pillarSql = `
-      SELECT pillar_id, COUNT(*) AS eventCount, AVG(score) AS avgScore
+      SELECT pillar_id, COUNT(*) AS "eventCount", AVG(score) AS "avgScore"
       FROM game_events
       GROUP BY pillar_id
     `;
 
     db.all(pillarSql, [], (err, pillarStats) => {
       if (err) {
+        console.error('Error aggregating pillar stats:', err.message);
         return res.status(500).json({ error: 'Failed to aggregate pillar stats' });
       }
 
+      // Safe access supporting both quoted camelCase and lowercase Postgres keys
+      const total = Number(summary?.totalStudents ?? summary?.totalstudents ?? 0);
+      const wallet = Number(summary?.avgWallet ?? summary?.avgwallet ?? 0);
+      const reserve = Number(summary?.avgReserve ?? summary?.avgreserve ?? 0);
+      const cibil = Number(summary?.avgCibilScore ?? summary?.avgcibilscore ?? 650);
+
       res.json({
         cohortMetrics: {
-          totalStudents: summary.totalStudents || 0,
-          avgWallet: Math.round(summary.avgWallet || 0),
-          avgReserve: Math.round(summary.avgReserve || 0),
-          avgCibilScore: Math.round(summary.avgCibilScore || 650)
+          totalStudents: total,
+          avgWallet: Math.round(wallet),
+          avgReserve: Math.round(reserve),
+          avgCibilScore: Math.round(cibil)
         },
-        pillarMastery: pillarStats
+        pillarMastery: pillarStats || []
       });
     });
   });
